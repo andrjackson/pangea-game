@@ -1,0 +1,27 @@
+{
+  "name": "pangea",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/engine",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "test": "npm run test -w @pangea/engine",
+    "typecheck": "tsc -p packages/engine && tsc -p packages/server && tsc -p packages/client",
+    "build": "npm run build -w @pangea/client",
+    "start": "npm run start -w @pangea/server",
+    "dev": "npm run dev -w @pangea/server & npm run dev -w @pangea/client"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
