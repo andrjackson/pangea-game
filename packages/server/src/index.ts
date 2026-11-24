@@ -23,6 +23,11 @@ app.get('/health', (_req, res) => res.json({ ok: true, rooms: store.count }));
 // Test hook, off unless PANGEA_DEBUG=1: POST {"path.to.field": value, ...} to overwrite parts of a game.
 if (process.env.PANGEA_DEBUG === '1') {
   console.log('PANGEA_DEBUG is on: /debug/:code can rewrite games. Never enable this for real play.');
+  app.get('/debug/:code', (req, res) => {
+    const room = store.get(req.params.code);
+    if (!room?.game) return res.status(404).json({ ok: false });
+    res.json(room.game);
+  });
   app.post('/debug/:code', express.json(), (req, res) => {
     const room = store.get(req.params.code);
     if (!room?.game) return res.status(404).json({ ok: false });

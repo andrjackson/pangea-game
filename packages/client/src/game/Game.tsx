@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Action } from '@pangea/engine';
 import { api, type RoomState } from '../net';
 import { Board } from './Board';
+import { useAttention, useMuted } from './attention';
 import { computeInteraction, myDecision, type Mode } from './interaction';
 import {
   ActionBar,
@@ -21,6 +22,8 @@ export function Game({ room }: { room: RoomState }) {
   const view = room.view!;
   const [mode, setMode] = useState<Mode | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [muted, toggleMute] = useMuted();
+  useAttention(view, muted);
 
   // Drop stale modes when the turn or situation changes.
   useEffect(() => {
@@ -66,7 +69,7 @@ export function Game({ room }: { room: RoomState }) {
 
   return (
     <div className="game">
-      <TopBar view={view} />
+      <TopBar view={view} muted={muted} onToggleMute={toggleMute} />
       <main className="table">
         <div className="board-wrap">
           <Board

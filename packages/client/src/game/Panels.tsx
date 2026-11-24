@@ -116,7 +116,7 @@ function Stepper({ types, value, onChange, max }: { types: CardType[]; value: Pa
 // top bar
 // ---------------------------------------------------------------------------
 
-export function TopBar({ view }: { view: PlayerView }) {
+export function TopBar({ view, muted, onToggleMute }: { view: PlayerView; muted: boolean; onToggleMute: () => void }) {
   const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length;
   const defense = Object.values(view.knights).reduce((n, k) => n + (k.active ? k.level : 0), 0);
   const steps = Array.from({ length: BARBARIAN_STEPS + 1 }, (_, i) => i);
@@ -143,6 +143,9 @@ export function TopBar({ view }: { view: PlayerView }) {
         </div>
       </div>
       <Dice view={view} />
+      <button className="btn tiny ghost sound" onClick={onToggleMute} title="Chime when the game is waiting on you">
+        {muted ? 'Sound off' : 'Sound on'}
+      </button>
     </header>
   );
 }
@@ -180,7 +183,7 @@ export function TurnBanner({ view, hint }: { view: PlayerView; hint: string | nu
   );
 }
 
-function describeDecision(view: PlayerView, d: Decision): string {
+export function describeDecision(view: PlayerView, d: Decision): string {
   switch (d.kind) {
     case 'discard':
       return `discard ${d.count} cards${d.reason === 'unrest' ? ' (Unrest)' : ''}`;
@@ -592,24 +595,25 @@ export function Improvements({ view, send, setMode }: { view: PlayerView; send: 
 
 export function ProgressHand({ view, send, setMode }: { view: PlayerView; send: Send; setMode: (m: Mode | null) => void }) {
   const cards = view.players[view.me].progress!;
-  const [open, setOpen] = useState<number | null>(null);
+  // Track the open card by name, not position: positions shift when cards are played or taken.
+  const [open, setOpen] = useState<ProgressId | null>(null);
+  const shown = open && cards.includes(open) ? open : null;
   if (!cards.length) return <div className="progress-hand muted small">No progress cards</div>;
   return (
     <div className="progress-hand">
       {cards.map((c, i) => (
-        <button key={i} className={`progress-card ${open === i ? 'open' : ''}`} style={{ ['--track' as string]: TRACK_INFO[PROGRESS[c].track].color }} onClick={() => setOpen(open === i ? null : i)}>
+        <button key={`${c}-${cards.slice(0, i).filter((x) => x === c).length}`} className={`progress-card ${shown === c ? 'open' : ''}`} style={{ ['--track' as string]: TRACK_INFO[PROGRESS[c].track].color }} onClick={() => setOpen(shown === c ? null : c)}>
           {PROGRESS[c].name}
         </button>
       ))}
-      {open !== null && cards[open] && (
+      {shown && (
         <CardPlayer
-          key={`${open}-${cards[open]}`}
+          key={shown}
           view={view}
-          card={cards[open]}
-          send={async (a) => {
-            const ok = await send(a);
-            if (ok) setOpen(null);
-            return ok;
+          card={shown}
+          send={(a) => {
+            setOpen(null);
+            return send(a);
           }}
           setMode={(m) => {
             setMode(m);

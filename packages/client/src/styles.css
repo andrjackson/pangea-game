@@ -926,3 +926,7 @@ input {
   color: #b5a684;
   border-color: #5a4a35;
 }
+.topbar .btn.sound {
+  color: var(--parchment);
+  border-color: #3f5b70;
+}

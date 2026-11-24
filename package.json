@@ -15,7 +15,8 @@
     "start": "npm run start -w @pangea/server",
     "host": "npm run build && npm run start",
     "dev:server": "npm run dev -w @pangea/server",
-    "dev:client": "npm run dev -w @pangea/client"
+    "dev:client": "npm run dev -w @pangea/client",
+    "e2e": "npm run build && tsx e2e/run.ts"
   },
   "engines": {
     "node": ">=20"

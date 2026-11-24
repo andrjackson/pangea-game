@@ -91,7 +91,7 @@ export function Board({ view, targets, selected, onVertex, onEdge, onHex }: Prop
           const a = board.vertices[e.a];
           const b = board.vertices[e.b];
           return (
-            <g key={`te${id}`} className="target" onClick={() => onEdge?.(id)}>
+            <g key={`te${id}`} className="target" data-edge={id} onClick={() => onEdge?.(id)}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={0.3} />
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="target-edge" strokeWidth={0.1} strokeLinecap="round" />
             </g>
@@ -124,14 +124,14 @@ export function Board({ view, targets, selected, onVertex, onEdge, onHex }: Prop
       {targets.hexes &&
         [...targets.hexes].map((id) => {
           const h = board.hexes[id];
-          return <polygon key={`th${id}`} className="target target-hex" points={poly(hexCorners(h.x, h.y, 0.9))} onClick={() => onHex?.(id)} />;
+          return <polygon key={`th${id}`} data-hex={id} className="target target-hex" points={poly(hexCorners(h.x, h.y, 0.9))} onClick={() => onHex?.(id)} />;
         })}
 
       {targets.vertices &&
         [...targets.vertices].map((id) => {
           const v = board.vertices[id];
           return (
-            <g key={`tv${id}`} className="target" onClick={() => onVertex?.(id)}>
+            <g key={`tv${id}`} className="target" data-vertex={id} onClick={() => onVertex?.(id)}>
               <circle cx={v.x} cy={v.y} r={0.24} fill="transparent" />
               <circle cx={v.x} cy={v.y} r={0.15} className={`target-vertex ${selected?.has(id) ? 'selected' : ''}`} />
             </g>

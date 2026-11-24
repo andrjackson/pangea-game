@@ -97,6 +97,14 @@ npm test
 runs the rules-engine tests (including long random-play games that check the
 rules never reach an impossible state).
 
+```bash
+npm run e2e
+```
+
+builds the site and drives real game screens with three browsers: barbarian raids,
+knight displacement, every interactive progress card, trades, and the turn alerts.
+It needs the `playwright` package and a Chromium it can launch.
+
 For live-reload development, run these in two terminals and open http://localhost:5173:
 
 ```bash
