@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
-import type { Action, CivId, PlayerView } from '@pangea/engine';
+import type { Action, CivId, GameOptions, PlayerView } from '@pangea/engine';
 
 export interface SeatInfo {
   name: string;
@@ -14,6 +14,7 @@ export interface RoomState {
   code: string;
   started: boolean;
   isHost: boolean;
+  options: GameOptions;
   seats: SeatInfo[];
   view: PlayerView | null;
 }
@@ -75,6 +76,8 @@ export const api = {
   start: () => must('start', {}),
   act: (action: Action) => must('action', { action }),
   report: (note: string) => must('report', { note }),
+  rematch: () => must('rematch', {}),
+  setOptions: (opts: Partial<GameOptions>) => must('setOptions', opts),
   async leave() {
     await emit('leave', {});
     saveSession(null);

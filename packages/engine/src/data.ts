@@ -1,4 +1,4 @@
-import type { CardType, CivId, Commodity, Hand, ProgressId, Resource, Terrain, Track } from './types';
+import type { CardType, CivId, Commodity, GameOptions, Hand, ProgressId, RaiderTheme, Resource, Terrain, Track } from './types';
 
 export const RESOURCES: Resource[] = ['brick', 'lumber', 'wool', 'grain', 'ore'];
 export const COMMODITIES: Commodity[] = ['paper', 'cloth', 'coin'];
@@ -28,6 +28,15 @@ export const CITY_COMMODITY: Partial<Record<Terrain, Commodity>> = {
 };
 
 export const WIN_VP = 13;
+export const DEFAULT_OPTIONS: GameOptions = { winVp: WIN_VP, tokens: 'spiral' };
+
+export const RAIDERS: Record<RaiderTheme, { name: string; byShip: boolean; skipIf?: CivId }> = {
+  vikings: { name: 'Viking raiders', byShip: true, skipIf: 'norse' },
+  pirates: { name: 'Pirates', byShip: true },
+  conquistadors: { name: 'Conquistadors', byShip: true },
+  huns: { name: 'The Hunnic horde', byShip: false },
+  seaPeoples: { name: 'The Sea Peoples', byShip: true },
+};
 export const PROGRESS_HAND_LIMIT = 4;
 export const BARBARIAN_STEPS = 7;
 

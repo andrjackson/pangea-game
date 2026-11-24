@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CIVS, bankRate, emptyHand, type CivId, type GameState, type Hand, type Knight, type ProgressId } from '@pangea/engine';
+import { CIVS, RAIDERS, bankRate, emptyHand, victoryPoints, type CivId, type GameState, type Hand, type Knight, type ProgressId } from '@pangea/engine';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +92,7 @@ interface Table {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function table(browser: any, civs: CivId[] = ['rome', 'japan', 'mali']): Promise<Table> {
+async function table(browser: any, civs: CivId[] = ['rome', 'japan', 'mali'], lobby?: (pages: Page[]) => Promise<void>): Promise<Table> {
   const errors: string[] = [];
   const pages: Page[] = [];
   for (let i = 0; i < 3; i++) {
@@ -116,6 +116,7 @@ async function table(browser: any, civs: CivId[] = ['rome', 'japan', 'mali']): P
     await pages[i].click(`.civ-card:has-text("${CIVS[civs[i]].name}")`);
     await sleep(100);
   }
+  if (lobby) await lobby(pages);
   await pages[0].click('text=Start the game');
   await pages[0].waitForSelector('.board');
   for (let step = 0; step < 12; step++) {
@@ -202,9 +203,97 @@ function chainFrom(s: GameState, start: number): [number, number, number] {
 // scenarios
 // ---------------------------------------------------------------------------
 
-type Scenario = { name: string; run: (t: Table) => Promise<void>; civs?: CivId[] };
+type Scenario = { name: string; run: (t: Table) => Promise<void>; civs?: CivId[]; lobby?: (pages: Page[]) => Promise<void> };
 
 const scenarios: Scenario[] = [
+  {
+    name: 'lobby options: host sets the victory target and number layout',
+    lobby: async (pages) => {
+      await pages[0].selectOption('.options select >> nth=0', '10');
+      await pages[0].selectOption('.options select >> nth=1', 'balanced');
+      await pages[1].waitForSelector('.options:has-text("First to 10")');
+      const guestSelects = await pages[1].locator('.options select').count();
+      assert(guestSelects === 0, 'only the host gets controls');
+    },
+    run: async (t) => {
+      const s = await getState(t.code);
+      assert(s.options.winVp === 10 && s.options.tokens === 'balanced', 'options carried into the game');
+      const title = await t.P[0].getAttribute('.raid', 'title');
+      assert(title.includes(RAIDERS[s.raiders].name), `top bar names the raiders (${s.raiders})`);
+    },
+  },
+  {
+    name: 'what just happened: production labels float up, new pieces glow, tooltips explain',
+    run: async (t) => {
+      let s = await getState(t.code);
+      const hex = s.board.hexes.find((h) => h.token !== null && h.token !== 7 && h.id !== s.robber && s.board.vertices.some((v) => v.hexes.includes(h.id) && s.buildings[v.id]))!;
+      const red = Math.min(6, hex.token! - 1);
+      await patch(t.code, { 'flags.augury': { red, yellow: hex.token! - red } });
+      await t.P[0].click('text=Roll dice');
+      await t.P[1].waitForSelector('.float-label', { timeout: 4000 });
+      if (process.env.PANGEA_SHOTS) {
+        await sleep(500);
+        await t.P[1].screenshot({ path: join(process.env.PANGEA_SHOTS, 'production-labels.png') });
+      }
+      await patch(t.code, { 'players.0.hand': hand({ brick: 1, lumber: 1 }) });
+      await t.P[0].click('.btn.build:has-text("Road")');
+      await t.P[0].locator('[data-edge]').first().click({ force: true });
+      await t.P[2].waitForSelector('.recent-edge', { state: 'attached', timeout: 4000 });
+      if (process.env.PANGEA_SHOTS) await t.P[2].screenshot({ path: join(process.env.PANGEA_SHOTS, 'recent-road.png') });
+      const tips = await t.P[0].locator('svg.board title').allTextContents();
+      assert(tips.some((x) => x.includes('Produces')), 'tiles explain what they produce');
+      assert(tips.some((x) => x.includes("'s road")), 'roads name their owner');
+      const heads = await t.P[0].locator('.log-turn').allTextContents();
+      assert(heads.some((h) => h.startsWith('Turn 1')) && heads.includes('Setup'), `log grouped by turn (${heads.join(' | ')})`);
+      s = await getState(t.code);
+      assert(s.production && s.production.items.length > 0, 'production recorded');
+    },
+  },
+  {
+    name: 'trading: responses show, counter-offer goes straight to the current player',
+    run: async (t) => {
+      await patch(t.code, { rolled: true, 'players.0.hand': hand({ brick: 2 }), 'players.1.hand': hand({ ore: 2 }), 'players.2.hand': hand({ wool: 1 }) });
+      await t.P[0].locator('.trade-side:has-text("You give") .card-chip[title="Brick"]').click();
+      await t.P[0].locator('.trade-side:has-text("You get") .card-chip[title="Ore"]').click();
+      await t.P[0].click('text=Propose trade');
+      await t.P[2].waitForSelector('.offers li');
+      await t.P[2].click('.offers button:has-text("Decline")');
+      await t.P[0].waitForSelector('.resp.no');
+      await t.P[1].click('.offers button:has-text("Counter")');
+      // Ben counters: 2 ore for 2 brick instead of 1 for 1
+      await t.P[1].locator('.trade-side:has-text("You give") .card-chip[title="Ore"]').click();
+      await t.P[1].locator('.trade-side:has-text("You get") .card-chip[title="Brick"]').click();
+      await t.P[1].click('text=Propose trade');
+      await waitFor(t.code, 'counter-offer', (g) => g.trades.some((o) => o.from === 1 && o.to === 0));
+      await t.P[0].waitForSelector('.offers li:has-text("(to you)")');
+      await t.P[0].locator('.offers li:has-text("(to you)") button:has-text("Accept")').click();
+      const s = await waitFor(t.code, 'counter accepted', (g) => g.players[0].hand.ore === 2);
+      assert(s.players[0].hand.brick === 0 && s.players[1].hand.brick === 2, 'counter-offer traded 2 for 2');
+    },
+  },
+  {
+    name: 'end of game: results screen, then play again with the same table',
+    run: async (t) => {
+      let s = await getState(t.code);
+      const settlement = Number(Object.entries(s.buildings).find(([, b]) => b.owner === 0 && b.kind === 'settlement')![0]);
+      await patch(t.code, { rolled: true, 'players.0.shields': s.options.winVp - victoryPoints(s, 0) - 1, 'players.0.hand': hand({ grain: 2, ore: 3 }) });
+      await t.P[0].click('.btn.build:has-text("City")');
+      await clickVertex(t.P[0], settlement);
+      s = await waitFor(t.code, 'game over', (g) => g.phase === 'ended');
+      for (const p of t.P) await p.waitForSelector('.end-screen');
+      if (process.env.PANGEA_SHOTS) await t.P[1].screenshot({ path: join(process.env.PANGEA_SHOTS, 'end-screen.png') });
+      const heading = await t.P[1].textContent('.end-title');
+      assert(heading.includes(t.name(0)), `winner announced (${heading})`);
+      assert((await t.P[1].locator('.stats tbody tr').count()) === 6, 'stats table shown');
+      await t.P[2].click('text=Look at the board');
+      await t.P[2].click('text=Show results');
+      await t.P[2].waitForSelector('.end-screen');
+      await t.P[1].click('text=Play again with the same table');
+      s = await waitFor(t.code, 'new game', (g) => g.phase === 'setup' && g.turn === 0);
+      for (const p of t.P) await p.waitForSelector('.end-screen', { state: 'detached' });
+      assert(s.players.map((p) => p.civ).sort().join() === ['japan', 'mali', 'rome'].sort().join(), 'same civs at the table');
+    },
+  },
   {
     name: 'territory: tiles take on civ art and shared tiles show both civs',
     run: async (t) => {
@@ -572,7 +661,7 @@ async function shipSeed(): Promise<number> {
   try {
     for (const sc of scenarios) {
       if (only && !sc.name.includes(only)) continue;
-      const t = await table(browser, sc.civs);
+      const t = await table(browser, sc.civs, sc.lobby);
       try {
         await sc.run(t);
         assert(t.errors.length === 0, `no page errors (${t.errors.join('; ')})`);

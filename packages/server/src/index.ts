@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
-import { viewFor, type Action, type CivId } from '@pangea/engine';
+import { viewFor, type Action, type CivId, type GameOptions } from '@pangea/engine';
 import { RoomStore, errorMessage, type Room } from './rooms';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -70,6 +70,7 @@ function roomPayload(room: Room, token: string) {
     code: room.code,
     started: !!room.game,
     isHost: room.host === token,
+    options: room.options,
     seats: room.seats.map((s) => ({
       name: s.name,
       civ: s.civ,
@@ -147,6 +148,15 @@ io.on('connection', (socket) => {
     withSession((s) => store.pickCiv(s.code, s.token, msg?.civ))(msg, ack),
   );
   socket.on('start', (msg: unknown, ack) => withSession((s) => store.start(s.code, s.token))(msg, ack));
+  socket.on('setOptions', (msg: Partial<GameOptions>, ack) =>
+    withSession((s) => {
+      const opts: Partial<GameOptions> = {};
+      if (msg?.winVp !== undefined) opts.winVp = Number(msg.winVp);
+      if (msg?.tokens !== undefined) opts.tokens = msg.tokens;
+      return store.setOptions(s.code, s.token, opts);
+    })(msg, ack),
+  );
+  socket.on('rematch', (msg: unknown, ack) => withSession((s) => store.rematch(s.code, s.token))(msg, ack));
   socket.on('action', (msg: { action: Action }, ack) =>
     withSession((s) => store.act(s.code, s.token, msg?.action))(msg, ack),
   );

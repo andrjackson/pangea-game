@@ -27,35 +27,42 @@ Status tags:
 
 ## Up next
 
-1. `[ready]` **Show what just happened.** When dice produce, briefly float "+1 Ore"
-   style labels from the producing tiles toward the players who got them. Highlight
-   the most recently placed piece for a few seconds. Group the Chronicle log by turn,
-   with the roller's name as a header.
-2. `[ready]` **Better trading.**
-   - Let players edit a counter-offer in place.
-   - Show next to each offer which players could afford it.
-   - Add a "repeat last trade" button.
-   - Make it clear when an offer is waiting on the current player's confirmation.
-3. `[ready]` **End-of-game screen.** Final scores with a VP breakdown, plus per-player
-   stats: resources produced, cards stolen, raids defended, progress cards played.
-   Add a "Play again with the same table" button that keeps names and civs.
-4. `[ready]` **Random barbarian themes.** Each game picks a raider theme (Vikings,
-   pirates, Huns, conquistadors, Mongols…) with its own ship or horde art on the
-   barbarian track. Skip a theme that matches a civ in play (e.g. no Vikings when
-   someone is Norse). Purely visual.
-5. `[ready]` **Hover details.** Tooltips on pieces (owner, knight level and whether it
-   can act this turn), tiles (number, what it produces, who's there), and harbors.
-6. `[ready]` **Lobby options.** Victory point target (10–15, default 13), plus the
-   rulebook's alternative number-token placement (random tokens with no red numbers
-   next to each other). The host picks; everyone sees the choice.
-7. `[needs decision]` **Easier hosting.** A permanent link (named Cloudflare tunnel,
+1. `[ready]` **Rejoin from another device.** Seats are tied to the browser that joined,
+   so a friend who switches laptops or clears their browser can't get back in. Let the
+   host generate a one-time "retake seat" link for any seat from the player list, which
+   moves that seat to whoever opens it. Test it in `e2e/run.ts`.
+2. `[ready]` **Raid announcement.** When raiders land, show everyone a short banner on
+   the board: raider strength vs. defense, who earned the Shield or which cities fell.
+   Right now it's only in the Chronicle, which is easy to miss.
+3. `[ready]` **Steal and discard feedback.** A toast to the victim ("Ana stole 1 Wool
+   from you"), and a brief highlight on the robber's new tile for everyone.
+4. `[ready]` **Subtle sound effects** for dice, building, and raids, using the existing
+   Sound on/off toggle (WebAudio, no audio files).
+5. `[ready]` **More civ tile art.** Territory tiles use civ-specific trees, crops and
+   animals, but hills, mountains and desert still use the shared drawings. Give each civ
+   its own take (e.g. Roman terracotta kilns, Japanese Fuji-style peaks, Persian
+   qanats in the desert), keeping the art's current flat style and palette.
+6. `[needs decision]` **Easier hosting.** A permanent link (named Cloudflare tunnel,
    needs a domain) or cloud hosting so the host PC can be off. Only if the changing
    tunnel link is a real annoyance.
-8. `[needs decision]` **Civ perks.** Small asymmetric abilities per civilization. Only
+7. `[needs decision]` **Civ perks.** Small asymmetric abilities per civilization. Only
    after a few real games, and balance-tested.
+
+## Not doing
+
+- Showing which players can afford a trade offer: it would reveal hidden hands.
 
 ## Done
 
+- `[done]` What just happened: floating "+N card" labels on production, glow on newly
+  placed pieces, Chronicle grouped by turn.
+- `[done]` Better trading: everyone's accept/decline status, Counter button,
+  "Again" button for the last offer, clear "ready to confirm" state.
+- `[done]` End-of-game screen with VP breakdown, stats and "Play again with the same table".
+- `[done]` Random raider themes (Vikings, pirates, conquistadors, Hunnic horde, Sea
+  Peoples), never Vikings when a Norse player is at the table.
+- `[done]` Hover details on tiles, pieces and harbors.
+- `[done]` Lobby options: victory target 10–15, and the balanced number layout.
 - `[done]` Territory art: tiles take on the civ style of whoever spreads onto them;
   shared tiles are split between civs.
 - `[done]` "Report a problem" button that saves the game state and a note on the host.

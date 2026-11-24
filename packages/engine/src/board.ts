@@ -93,7 +93,7 @@ export function buildGraph(hexes: HexTile[]): { vertices: Vertex[]; edges: Edge[
   return { vertices, edges };
 }
 
-export function generateBoard(holder: RngHolder): Board {
+export function generateBoard(holder: RngHolder, tokens: 'spiral' | 'balanced' = 'spiral'): Board {
   // 1. Terrain: shuffle and lay into the hexagon (positions in spiral order from corner 0).
   const terrains: Terrain[] = [];
   for (const [t, n] of Object.entries(TERRAIN_COUNTS) as [Terrain, number][]) {
@@ -106,16 +106,20 @@ export function generateBoard(holder: RngHolder): Board {
     return { id: i, q, r, x, y, terrain: shuffled[i], token: null };
   });
 
-  // 2. Number tokens: counterclockwise spiral from a random corner, skipping the desert.
-  const startCorner = randInt(holder, 6);
-  let t = 0;
-  for (const [q, r] of spiral(startCorner)) {
-    const hex = hexes.find((h) => h.q === q && h.r === r)!;
-    if (hex.terrain === 'desert') continue;
-    hex.token = TOKEN_SEQUENCE[t++];
-  }
-
   const { vertices, edges } = buildGraph(hexes);
+
+  // 2. Number tokens.
+  if (tokens === 'balanced') placeBalancedTokens(holder, hexes);
+  else {
+    // Counterclockwise spiral from a random corner, skipping the desert.
+    const startCorner = randInt(holder, 6);
+    let t = 0;
+    for (const [q, r] of spiral(startCorner)) {
+      const hex = hexes.find((h) => h.q === q && h.r === r)!;
+      if (hex.terrain === 'desert') continue;
+      hex.token = TOKEN_SEQUENCE[t++];
+    }
+  }
 
   // 3. Harbors: 9 evenly spaced coastal edges (gaps 3,3,4 around the 30-edge coast), random rotation, shuffled kinds.
   const coast = edges
@@ -148,4 +152,20 @@ export function generateBoard(holder: RngHolder): Board {
 
 export function desertHex(board: Board): number {
   return board.hexes.find((h) => h.terrain === 'desert')!.id;
+}
+
+export function hexNeighbors(hexes: HexTile[], hex: HexTile): HexTile[] {
+  return DIRS.map(([dq, dr]) => hexes.find((h) => h.q === hex.q + dq && h.r === hex.r + dr)).filter((h): h is HexTile => !!h);
+}
+
+/** The rulebook's alternative: tokens placed at random, re-dealt until no two red numbers (6, 8) touch. */
+function placeBalancedTokens(holder: RngHolder, hexes: HexTile[]): void {
+  const land = hexes.filter((h) => h.terrain !== 'desert');
+  for (let attempt = 0; attempt < 10000; attempt++) {
+    const tokens = shuffle(holder, TOKEN_SEQUENCE);
+    land.forEach((h, i) => (h.token = tokens[i]));
+    const red = (h: HexTile) => h.token === 6 || h.token === 8;
+    if (!land.some((h) => red(h) && hexNeighbors(hexes, h).some(red))) return;
+  }
+  throw new Error('could not place balanced tokens');
 }

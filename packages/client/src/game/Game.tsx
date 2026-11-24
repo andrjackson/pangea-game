@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Action } from '@pangea/engine';
 import { api, type RoomState } from '../net';
 import { Board } from './Board';
+import { EndScreen } from './EndScreen';
 import { useAttention, useMuted } from './attention';
 import { computeInteraction, myDecision, type Mode } from './interaction';
 import {
@@ -25,6 +26,10 @@ export function Game({ room }: { room: RoomState }) {
   const [toast, setToast] = useState<string | null>(null);
   const [muted, toggleMute] = useMuted();
   const [reporting, setReporting] = useState(false);
+  const [resultsClosed, setResultsClosed] = useState(false);
+  useEffect(() => {
+    if (view.phase !== 'ended') setResultsClosed(false);
+  }, [view.phase]);
   const [notice, setNotice] = useState<string | null>(null);
   useAttention(view, muted);
 
@@ -79,6 +84,7 @@ export function Game({ room }: { room: RoomState }) {
   return (
     <div className="game">
       <TopBar view={view} muted={muted} onToggleMute={toggleMute} onReport={() => setReporting(true)} />
+      {view.phase === 'ended' && !resultsClosed && <EndScreen view={view} onClose={() => setResultsClosed(true)} />}
       {reporting && (
         <ReportDialog
           onClose={() => setReporting(false)}
@@ -112,7 +118,7 @@ export function Game({ room }: { room: RoomState }) {
           )}
         </div>
         <aside className="sidebar">
-          <TurnBanner view={view} hint={interaction.hint} />
+          <TurnBanner view={view} hint={interaction.hint} onShowResults={() => setResultsClosed(false)} />
           <WaitingOn view={view} />
           {decision && <DecisionPanel view={view} decision={decision} send={send} />}
           <PlayerList view={view} />

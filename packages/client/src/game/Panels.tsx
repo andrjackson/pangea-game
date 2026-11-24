@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BARBARIAN_STEPS,
+  RAIDERS,
   CARD_NAMES,
   CARD_TYPES,
   CIVS,
@@ -23,7 +24,8 @@ import {
   type Track,
 } from '@pangea/engine';
 import { CivEmblem } from '../art/civ';
-import { CARD_COLOR, CardIcon, Longship } from '../art/tiles';
+import { RaiderArt } from '../art/raiders';
+import { CARD_COLOR, CardIcon } from '../art/tiles';
 import { BOARD_CARDS, type Mode } from './interaction';
 
 type Send = (a: Action) => Promise<boolean>;
@@ -123,18 +125,18 @@ export function TopBar({ view, muted, onToggleMute, onReport }: { view: PlayerVi
   return (
     <header className="topbar">
       <div className="brand">Pangea</div>
-      <div className="raid" title="The barbarian ship advances on every ship roll of the event die. When it lands, active knights must match the number of cities.">
+      <div className="raid" title={`${RAIDERS[view.raiders].name} advance one step on every raider face of the event die. When they land, active knights must match the number of cities on the island.`}>
         <div className="raid-track">
           {steps.map((i) => (
             <div key={i} className={`raid-step ${i === BARBARIAN_STEPS ? 'shore' : ''} ${i === view.barbarian.position ? 'here' : ''}`}>
-              {i === view.barbarian.position && <Longship width={54} />}
+              {i === view.barbarian.position && <RaiderArt theme={view.raiders} width={54} />}
               {i === BARBARIAN_STEPS && <span className="watchfire" aria-hidden>▲</span>}
             </div>
           ))}
         </div>
         <div className="raid-stats">
           <span>
-            Raiders <b>{strength}</b>
+            {RAIDERS[view.raiders].name} <b>{strength}</b>
           </span>
           <span className={defense >= strength ? 'good' : 'bad'}>
             Defenders <b>{defense}</b>
@@ -161,7 +163,7 @@ function Dice({ view }: { view: PlayerView }) {
       <span className="die red">{red}</span>
       <span className="die yellow">{yellow}</span>
       <span className="die event" style={{ background: event === 'ship' ? '#2b2522' : TRACK_INFO[event].color }}>
-        {event === 'ship' ? '⛵' : TRACK_INFO[event].name[0]}
+        {event === 'ship' ? '⚔' : TRACK_INFO[event].name[0]}
       </span>
       <span className="dice-sum">{red + yellow}</span>
     </div>
@@ -172,7 +174,7 @@ function Dice({ view }: { view: PlayerView }) {
 // sidebar
 // ---------------------------------------------------------------------------
 
-export function TurnBanner({ view, hint }: { view: PlayerView; hint: string | null }) {
+export function TurnBanner({ view, hint, onShowResults }: { view: PlayerView; hint: string | null; onShowResults?: () => void }) {
   let text: string;
   if (view.phase === 'ended') text = `${nameOf(view, view.winner!)} wins with ${view.players[view.winner!].vp} victory points!`;
   else if (view.phase === 'setup') text = 'Setup: place your starting pieces in turn.';
@@ -182,6 +184,11 @@ export function TurnBanner({ view, hint }: { view: PlayerView; hint: string | nu
     <div className={`turn-banner ${view.current === view.me || view.phase === 'ended' ? 'mine' : ''}`}>
       <div>{text}</div>
       {hint && <div className="hint">{hint}</div>}
+      {view.phase === 'ended' && onShowResults && (
+        <button className="btn tiny" onClick={onShowResults}>
+          Show results
+        </button>
+      )}
     </div>
   );
 }
@@ -385,7 +392,7 @@ export function PlayerList({ view }: { view: PlayerView }) {
                 ))}
               </div>
             </div>
-            <div className="vp" title="Victory points (13 wins)">
+            <div className="vp" title={`Victory points (${view.options.winVp} wins)`}>
               {p.vp}
             </div>
           </div>
@@ -401,6 +408,7 @@ export function TradePanel({ view, send }: { view: PlayerView; send: Send }) {
   const isCurrent = view.current === view.me;
   const [give, setGive] = useState<Partial<Hand>>({});
   const [get, setGet] = useState<Partial<Hand>>({});
+  const [last, setLast] = useState<{ give: Partial<Hand>; get: Partial<Hand> } | null>(null);
   const [bankGive, setBankGive] = useState<CardType | null>(null);
   const canTrade = view.phase === 'play' && view.rolled && view.queue.length === 0;
   useEffect(() => {
@@ -411,6 +419,17 @@ export function TradePanel({ view, send }: { view: PlayerView; send: Send }) {
   if (!canTrade) return null;
 
   const offers = view.trades;
+  const others = view.players.filter((p) => p.id !== view.current);
+  const canAfford = (cards: Partial<Hand>) => CARD_TYPES.every((t) => hand[t] >= (cards[t] ?? 0));
+  const propose = async (g: Partial<Hand>, w: Partial<Hand>) => {
+    if (await send({ type: 'offerTrade', give: g, get: w })) {
+      setLast({ give: g, get: w });
+      setGive({});
+      setGet({});
+    }
+  };
+  const builderEmpty = !handSize(give) && !handSize(get);
+
   return (
     <section className="panel trade">
       <h3>Trade</h3>
@@ -418,35 +437,64 @@ export function TradePanel({ view, send }: { view: PlayerView; send: Send }) {
         <ul className="offers">
           {offers.map((o) => {
             const mine = o.from === view.me;
-            const toMe = o.to === view.me || (o.to === null && !mine);
+            const open = o.to === null;
+            const toMe = o.to === view.me || (open && !mine);
+            const ready = mine && open && o.accepted.length > 0;
+            const iAccepted = o.accepted.includes(view.me);
             return (
-              <li key={o.id}>
+              <li key={o.id} className={ready ? 'ready' : ''}>
                 <div>
-                  <b>{mine ? 'You' : nameOf(view, o.from)}</b> give {describeCards(o.give)} for {describeCards(o.get)}
-                  {o.to !== null && !mine && o.to !== view.me ? ` (to ${nameOf(view, o.to)})` : ''}
+                  <b>{mine ? 'You' : nameOf(view, o.from)}</b> {mine ? 'give' : 'gives'} {describeCards(o.give)} for {describeCards(o.get)}
+                  {!open && ` (to ${o.to === view.me ? 'you' : nameOf(view, o.to!)})`}
                 </div>
+                {open && (
+                  <div className="responses">
+                    {others.map((p) => {
+                      const st = o.accepted.includes(p.id) ? 'yes' : o.declined.includes(p.id) ? 'no' : 'wait';
+                      return (
+                        <span key={p.id} className={`resp ${st}`} title={st === 'yes' ? 'accepted' : st === 'no' ? 'declined' : 'thinking'}>
+                          {p.id === view.me ? 'You' : p.name} {st === 'yes' ? '✓' : st === 'no' ? '✗' : '…'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {ready && <div className="small ready-note">Accepted! Pick who to trade with.</div>}
+                {iAccepted && <div className="small muted">You accepted. Waiting for {nameOf(view, o.from)} to confirm.</div>}
                 <div className="btn-row">
-                  {mine && o.to === null &&
+                  {mine &&
+                    open &&
                     o.accepted.map((p) => (
                       <button key={p} className="btn tiny primary" onClick={() => send({ type: 'confirmTrade', offer: o.id, with: p })}>
                         Trade with {nameOf(view, p)}
                       </button>
                     ))}
-                  {mine && o.to === null && o.accepted.length === 0 && <span className="muted">waiting for answers{o.declined.length ? ` (${o.declined.map((p) => nameOf(view, p)).join(', ')} declined)` : ''}</span>}
                   {mine && (
                     <button className="btn tiny ghost" onClick={() => send({ type: 'cancelTrade', offer: o.id })}>
                       Withdraw
                     </button>
                   )}
+                  {toMe && !iAccepted && (
+                    <button className="btn tiny primary" disabled={!canAfford(o.get)} title={canAfford(o.get) ? '' : 'You do not have those cards'} onClick={() => send({ type: 'respondTrade', offer: o.id, accept: true })}>
+                      Accept
+                    </button>
+                  )}
                   {toMe && (
-                    <>
-                      <button className="btn tiny primary" onClick={() => send({ type: 'respondTrade', offer: o.id, accept: true })} disabled={o.accepted.includes(view.me)}>
-                        {o.accepted.includes(view.me) ? 'Accepted' : 'Accept'}
-                      </button>
-                      <button className="btn tiny ghost" onClick={() => send({ type: 'respondTrade', offer: o.id, accept: false })}>
-                        Decline
-                      </button>
-                    </>
+                    <button className="btn tiny ghost" onClick={() => send({ type: 'respondTrade', offer: o.id, accept: false })}>
+                      Decline
+                    </button>
+                  )}
+                  {open && !mine && !isCurrent && (
+                    <button
+                      className="btn tiny ghost"
+                      title="Start a counter-offer from this one"
+                      onClick={() => {
+                        setGive(o.get);
+                        setGet(o.give);
+                      }}
+                    >
+                      Counter…
+                    </button>
                   )}
                 </div>
               </li>
@@ -465,18 +513,27 @@ export function TradePanel({ view, send }: { view: PlayerView; send: Send }) {
           <span>You get</span>
           <Stepper types={CARD_TYPES} value={get} onChange={setGet} />
         </div>
-        <button
-          className="btn"
-          disabled={!handSize(give) || !handSize(get)}
-          onClick={async () => {
-            if (await send({ type: 'offerTrade', give, get })) {
-              setGive({});
-              setGet({});
-            }
-          }}
-        >
-          Propose trade
-        </button>
+        <div className="btn-row">
+          <button className="btn" disabled={!handSize(give) || !handSize(get)} onClick={() => propose(give, get)}>
+            Propose trade
+          </button>
+          {!builderEmpty && (
+            <button
+              className="btn ghost tiny"
+              onClick={() => {
+                setGive({});
+                setGet({});
+              }}
+            >
+              Clear
+            </button>
+          )}
+          {builderEmpty && last && canAfford(last.give) && (
+            <button className="btn ghost tiny" onClick={() => propose(last.give, last.get)} title="Propose your last trade again">
+              Again: {describeCards(last.give)} for {describeCards(last.get)}
+            </button>
+          )}
+        </div>
       </div>
 
       {isCurrent && (
@@ -508,15 +565,32 @@ export function TradePanel({ view, send }: { view: PlayerView; send: Send }) {
 }
 
 export function LogPanel({ view }: { view: PlayerView }) {
-  const entries = useMemo(() => view.log.slice(-80).reverse(), [view.log]);
+  const groups = useMemo(() => {
+    const out: { turn: number; entries: PlayerView['log'] }[] = [];
+    for (const e of view.log.slice(-120)) {
+      const last = out[out.length - 1];
+      if (last && last.turn === e.turn) last.entries.push(e);
+      else out.push({ turn: e.turn, entries: [e] });
+    }
+    return out.reverse().map((g) => ({ ...g, entries: g.entries.slice().reverse() }));
+  }, [view.log]);
+  const n = view.players.length;
+  const heading = (turn: number) => (turn === 0 ? 'Setup' : `Turn ${turn} · ${view.players[(turn - 1) % n].name}`);
   return (
     <section className="panel log">
       <h3>Chronicle</h3>
       <ol>
-        {entries.map((e, i) => (
-          <li key={i} className={e.only ? 'private' : ''}>
-            {e.player !== null && <span className="dot" style={{ background: CIVS[view.players[e.player].civ].main }} />}
-            {e.text}
+        {groups.map((g) => (
+          <li key={`${g.turn}-${g.entries.length}`} className="log-group">
+            <div className="log-turn">{heading(g.turn)}</div>
+            <ol>
+              {g.entries.map((e, i) => (
+                <li key={i} className={e.only ? 'private' : ''}>
+                  {e.player !== null && <span className="dot" style={{ background: CIVS[view.players[e.player].civ].main }} />}
+                  {e.text}
+                </li>
+              ))}
+            </ol>
           </li>
         ))}
       </ol>

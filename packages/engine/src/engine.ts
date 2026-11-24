@@ -1,6 +1,8 @@
 import { desertHex, generateBoard } from './board';
 import {
   BARBARIAN_STEPS,
+  DEFAULT_OPTIONS,
+  RAIDERS,
   CARD_NAMES,
   CARD_TYPES,
   CITY_COMMODITY,
@@ -17,7 +19,6 @@ import {
   TRACKS,
   TRACK_COMMODITY,
   TRACK_INFO,
-  WIN_VP,
   emptyHand,
 } from './data';
 import {
@@ -54,12 +55,14 @@ import type {
   CardType,
   Decision,
   EventFace,
+  GameOptions,
   GameState,
   Hand,
   Knight,
   ProgressId,
   ProgressParams,
   QueueItem,
+  RaiderTheme,
   Resource,
   SetupPlayer,
   Track,
@@ -83,14 +86,15 @@ const MAX_LOG = 300;
 // creation
 // ---------------------------------------------------------------------------
 
-export function createGame(setupPlayers: SetupPlayer[], seed: number): GameState {
+export function createGame(setupPlayers: SetupPlayer[], seed: number, opts: Partial<GameOptions> = {}): GameState {
   if (setupPlayers.length < 3 || setupPlayers.length > 4) fail('Pangea needs 3 or 4 players.');
+  const options = validateOptions(opts);
   const civs = new Set(setupPlayers.map((p) => p.civ));
   if (civs.size !== setupPlayers.length) fail('Each player needs a different civilization.');
   for (const p of setupPlayers) if (!CIVS[p.civ]) fail(`Unknown civilization ${p.civ}.`);
 
   const holder = { rng: seed >>> 0 || 1 };
-  const board = generateBoard(holder);
+  const board = generateBoard(holder, options.tokens);
   const seats = shuffle(holder, setupPlayers);
   const decks = {} as Record<Track, ProgressId[]>;
   for (const track of TRACKS) {
@@ -98,9 +102,15 @@ export function createGame(setupPlayers: SetupPlayer[], seed: number): GameState
     for (const def of Object.values(PROGRESS)) if (def.track === track) for (let i = 0; i < def.count; i++) cards.push(def.id);
     decks[track] = shuffle(holder, cards);
   }
+  const themes = (Object.keys(RAIDERS) as RaiderTheme[]).filter((t) => !setupPlayers.some((p) => p.civ === RAIDERS[t].skipIf));
+  const raiders = themes[randInt(holder, themes.length)];
 
   const s: GameState = {
     version: 1,
+    options,
+    stats: emptyStats(setupPlayers.length),
+    raiders,
+    production: null,
     rng: holder.rng,
     board,
     players: seats.map((p, i) => ({
@@ -139,6 +149,28 @@ export function createGame(setupPlayers: SetupPlayer[], seed: number): GameState
   };
   log(s, null, `Seat order: ${s.players.map((p) => `${p.name} (${CIVS[p.civ].name})`).join(', ')}.`);
   log(s, 0, `${s.players[0].name} places first.`);
+  log(s, null, `${RAIDERS[raiders].name} threaten the island. First to ${options.winVp} victory points wins.`);
+  return s;
+}
+
+export function validateOptions(opts: Partial<GameOptions>): GameOptions {
+  const o = { ...DEFAULT_OPTIONS, ...opts };
+  if (!Number.isInteger(o.winVp) || o.winVp < 10 || o.winVp > 15) fail('The victory target must be between 10 and 15.');
+  if (o.tokens !== 'spiral' && o.tokens !== 'balanced') fail('Unknown number layout.');
+  return o;
+}
+
+function emptyStats(n: number): GameState['stats'] {
+  const z = () => Array.from({ length: n }, () => 0);
+  return { produced: z(), robbed: z(), lostToRobber: z(), progressPlayed: z(), trades: z(), discarded: z() };
+}
+
+/** Fills in fields added after a game was saved, so older saves keep working. */
+export function upgradeState(s: GameState): GameState {
+  s.options ??= { ...DEFAULT_OPTIONS };
+  s.stats ??= emptyStats(s.players.length);
+  s.raiders ??= 'vikings';
+  s.production ??= null;
   return s;
 }
 
@@ -176,7 +208,7 @@ export function applyAction(state: GameState, player: number, action: Action): G
     !(action.type === 'moveKnight' && state.knights[action.to]);
   const snapshot = undoable ? JSON.stringify({ ...state, undo: [] }) : null;
 
-  const s: GameState = structuredClone(state);
+  const s: GameState = upgradeState(structuredClone(state));
   handle(s, player, action);
   advance(s);
   s.undo = snapshot ? [...state.undo, snapshot].slice(-20) : [];
@@ -279,10 +311,10 @@ function eventDie(s: GameState): void {
   if (face === 'ship') {
     s.barbarian.position++;
     if (s.barbarian.position >= BARBARIAN_STEPS) {
-      log(s, null, 'The barbarian ship reaches the shore!');
+      log(s, null, `${RAIDERS[s.raiders].name} reach the shore!`);
       pushFront(s, [{ kind: 'auto:barbarianAttack' }]);
     } else {
-      log(s, null, `The barbarian ship sails closer (${s.barbarian.position}/${BARBARIAN_STEPS}).`);
+      log(s, null, `${RAIDERS[s.raiders].name} draw closer (${s.barbarian.position}/${BARBARIAN_STEPS}).`);
     }
   } else {
     pushFront(s, [{ kind: 'auto:gateDraw', track: face }]);
@@ -389,6 +421,7 @@ function production(s: GameState): void {
   }
 
   const gains: Hand[] = s.players.map(() => emptyHand());
+  const items: NonNullable<GameState['production']>['items'] = [];
   for (const hex of s.board.hexes) {
     if (hex.token !== sum || hex.id === s.robber) continue;
     const res = TERRAIN_RESOURCE[hex.terrain];
@@ -397,20 +430,24 @@ function production(s: GameState): void {
       if (!v.hexes.includes(hex.id)) continue;
       const b = s.buildings[v.id];
       if (!b) continue;
-      gains[b.owner][res] += 1;
-      if (b.kind === 'city') {
-        const com = CITY_COMMODITY[hex.terrain];
-        if (com) gains[b.owner][com] += 1;
-        else gains[b.owner][res] += 1;
-      }
+      let item = items.find((x) => x.hex === hex.id && x.player === b.owner);
+      if (!item) items.push((item = { hex: hex.id, player: b.owner, cards: {} }));
+      const add = (t: CardType) => {
+        gains[b.owner][t] += 1;
+        item!.cards[t] = (item!.cards[t] ?? 0) + 1;
+      };
+      add(res);
+      if (b.kind === 'city') add(CITY_COMMODITY[hex.terrain] ?? res);
     }
   }
+  s.production = { seq: s.nextId++, sum, items };
   const granaries: Decision[] = [];
   const group = newGroup(s);
   for (const p of s.players) {
     const g = gains[p.id];
     if (handSize(g) > 0) {
       gain(p.hand, g);
+      s.stats.produced[p.id] += handSize(g);
       log(s, p.id, `${p.name} collects ${describeCards(g)}.`);
     } else if (p.improvements.science >= 3) {
       granaries.push({ kind: 'pickResource', group, player: p.id });
@@ -459,7 +496,7 @@ function updateLongestRoad(s: GameState): void {
 function checkWin(s: GameState): void {
   if (s.phase !== 'play') return;
   const vp = victoryPoints(s, s.current);
-  if (vp >= WIN_VP) {
+  if (vp >= s.options.winVp) {
     s.phase = 'ended';
     s.winner = s.current;
     s.queue = [];
@@ -476,6 +513,8 @@ function stealRandom(s: GameState, thief: number, victim: number): void {
     if (pick < hand[t]) {
       hand[t]--;
       s.players[thief].hand[t]++;
+      s.stats.robbed[thief]++;
+      s.stats.lostToRobber[victim]++;
       log(s, thief, `${s.players[thief].name} steals a card from ${s.players[victim].name}.`);
       log(s, thief, `${s.players[thief].name} stole 1 ${CARD_NAMES[t]} from ${s.players[victim].name}.`, [thief, victim]);
       return;
@@ -622,6 +661,7 @@ function handle(s: GameState, p: number, a: Action): void {
       const d = takeDecision(s, p, 'discard');
       const cards = exactCards(s, p, a.cards, d.count);
       pay(s.players[p].hand, cards);
+      s.stats.discarded[p] += d.count;
       log(s, p, `${s.players[p].name} discards ${d.count} cards.`);
       return;
     }
@@ -814,8 +854,7 @@ function roll(s: GameState, p: number): void {
   s.flags.augury = null;
   s.dice = { red, yellow, event };
   s.rolled = true;
-  const evText = event === 'ship' ? 'barbarian ship' : `${TRACK_INFO[event].name} gate`;
-  log(s, p, `${s.players[p].name} rolls ${red + yellow} (red ${red}, yellow ${yellow}) and the ${evText}.`);
+  log(s, p, `${s.players[p].name} rolls ${red + yellow} (red ${red}, yellow ${yellow}).`);
   s.queue.push({ kind: 'auto:eventDie' }, { kind: 'auto:production' });
 }
 
@@ -1083,6 +1122,8 @@ function executeTrade(s: GameState, a: number, b: number, aGives: Partial<Hand>,
   if (!hasCards(s.players[b].hand, bGives)) fail(`${s.players[b].name} no longer has the cards for this trade.`);
   transfer(s, a, b, aGives);
   transfer(s, b, a, bGives);
+  s.stats.trades[a]++;
+  s.stats.trades[b]++;
   log(s, a, `${s.players[a].name} and ${s.players[b].name} trade ${describeCards(aGives)} for ${describeCards(bGives)}.`);
 }
 
@@ -1155,6 +1196,7 @@ function playProgress(s: GameState, p: number, card: ProgressId, params: Progres
   player.progress.splice(idx, 1);
   s.decks[def.track].push(card);
   log(s, p, `${player.name} plays ${def.name}.`);
+  s.stats.progressPlayed[p]++;
   const others = opponentsInOrder(s, p);
 
   switch (card) {

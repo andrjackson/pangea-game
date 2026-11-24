@@ -53,7 +53,11 @@ npm install
    and friends install nothing.
 
 3. Everyone opens the link: one person creates a game and shares the 4-letter code
-   (or the invite link from the lobby), everyone picks a civilization, the host starts.
+   (or the invite link from the lobby), everyone picks a civilization, and the host
+   picks the options (victory target 10–15, and the rulebook's spiral numbers or a
+   random layout with no 6s or 8s side by side) and starts. When someone wins, the
+   results screen shows everyone's points and stats, and **Play again with the same
+   table** starts a fresh game with the same people and civs.
 
 **Found a bug or something confusing?** Click **Report a problem** in the top bar
 during the game. It saves the exact moment of the game plus your note in
@@ -79,7 +83,8 @@ Then `npm run host` as usual.
 ## How a turn works (quick reference)
 
 - **Roll**: two number dice plus the event die. The event die either moves the
-  barbarian ship one step closer, or opens a city gate (science, trade, politics) that
+  raiders one step closer (each game draws a raider theme: Vikings, pirates,
+  conquistadors, the Hunnic horde or the Sea Peoples), or opens a city gate (science, trade, politics) that
   hands out progress cards to players with improvements in that track.
 - **Cities** produce a commodity on forest (paper), pasture (cloth) and mountains (coin).
   Spend commodities to improve your cities; level 3 unlocks an ability, and the first to
@@ -90,6 +95,7 @@ Then `npm run host` as usual.
 - The **robber** sleeps until the first barbarian raid.
 - **Undo** takes back your last build, knight action, improvement or bank trade. It
   can't undo dice, cards, steals or trades with players.
+- **Hover** over any tile, piece or harbor for details.
 - **Territory** is just for looks: tiles take on the style of whichever civs have
   spread onto them with roads, settlements and cities, and shared tiles are split
   between those civs.

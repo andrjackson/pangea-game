@@ -267,18 +267,36 @@ export function isOpenRoad(g: GameLike, e: number): boolean {
 
 // ---------- scoring ----------
 
-export function victoryPoints(g: GameLike, player: number): number {
-  let vp = 0;
+export interface VpBreakdown {
+  settlements: number;
+  cities: number;
+  metropolises: number;
+  longestRoad: number;
+  shields: number;
+  progress: number;
+  caravan: number;
+  total: number;
+}
+
+export function vpBreakdown(g: GameLike, player: number): VpBreakdown {
+  const out: VpBreakdown = { settlements: 0, cities: 0, metropolises: 0, longestRoad: 0, shields: 0, progress: 0, caravan: 0, total: 0 };
   for (const b of Object.values(g.buildings)) {
     if (b.owner !== player) continue;
-    vp += b.kind === 'city' ? 2 : 1;
-    if (b.metropolis) vp += 2;
+    if (b.kind === 'city') out.cities += 2;
+    else out.settlements += 1;
+    if (b.metropolis) out.metropolises += 2;
   }
-  if (g.longestRoad === player) vp += 2;
+  if (g.longestRoad === player) out.longestRoad = 2;
   const p = g.players[player];
-  vp += p.shields + p.vpCards.length;
-  if (g.caravan && g.caravan.owner === player) vp += 1;
-  return vp;
+  out.shields = p.shields;
+  out.progress = p.vpCards.length;
+  if (g.caravan && g.caravan.owner === player) out.caravan = 1;
+  out.total = out.settlements + out.cities + out.metropolises + out.longestRoad + out.shields + out.progress + out.caravan;
+  return out;
+}
+
+export function victoryPoints(g: GameLike, player: number): number {
+  return vpBreakdown(g, player).total;
 }
 
 // ---------- trading ----------

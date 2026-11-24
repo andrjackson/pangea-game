@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CIVS, CIV_IDS, type CivId } from '@pangea/engine';
+import { CIVS, CIV_IDS, type CivId, type GameOptions } from '@pangea/engine';
 import { CivEmblem, PieceSwatch } from './art/civ';
 import { Longship } from './art/tiles';
 import { Game } from './game/Game';
@@ -157,6 +157,8 @@ function Lobby({ room }: { room: RoomState }) {
         {error && <div className="error-text">{error}</div>}
       </section>
 
+      <LobbyOptions room={room} onError={setError} />
+
       <div className="lobby-actions">
         {room.isHost ? (
           <button className="btn primary" disabled={!canStart} onClick={() => api.start().catch((e) => setError(e.message))}>
@@ -170,5 +172,41 @@ function Lobby({ room }: { room: RoomState }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function LobbyOptions({ room, onError }: { room: RoomState; onError: (msg: string) => void }) {
+  const set = (opts: Partial<GameOptions>) => api.setOptions(opts).catch((e) => onError((e as Error).message));
+  const { winVp, tokens } = room.options;
+  return (
+    <section className="panel options">
+      <h2>Game options</h2>
+      {room.isHost ? (
+        <div className="option-grid">
+          <label className="field">
+            <span>Victory points to win</span>
+            <select value={winVp} onChange={(e) => set({ winVp: Number(e.target.value) })}>
+              {[10, 11, 12, 13, 14, 15].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                  {n === 13 ? ' (standard)' : n < 13 ? ' (shorter game)' : ' (longer game)'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Number tokens</span>
+            <select value={tokens} onChange={(e) => set({ tokens: e.target.value as GameOptions['tokens'] })}>
+              <option value="spiral">Rulebook spiral (standard)</option>
+              <option value="balanced">Random, no 6s or 8s side by side</option>
+            </select>
+          </label>
+        </div>
+      ) : (
+        <p className="muted">
+          First to <b>{winVp}</b> victory points · {tokens === 'spiral' ? 'rulebook spiral numbers' : 'random numbers, no 6s or 8s side by side'}. The host can change these.
+        </p>
+      )}
+    </section>
   );
 }

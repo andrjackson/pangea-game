@@ -7,6 +7,31 @@ export type Terrain = 'hills' | 'forest' | 'pasture' | 'fields' | 'mountains' | 
 export type HarborKind = 'any' | Resource;
 export type EventFace = 'ship' | Track;
 
+export type RaiderTheme = 'vikings' | 'pirates' | 'conquistadors' | 'huns' | 'seaPeoples';
+
+export interface GameOptions {
+  /** Victory points needed to win on your own turn. */
+  winVp: number;
+  /** 'spiral': rulebook spiral. 'balanced': random tokens with no 6s or 8s next to each other. */
+  tokens: 'spiral' | 'balanced';
+}
+
+export interface Stats {
+  produced: number[];
+  robbed: number[];
+  lostToRobber: number[];
+  progressPlayed: number[];
+  trades: number[];
+  discarded: number[];
+}
+
+/** What the most recent production roll paid out, per tile and player (public, like at the table). */
+export interface ProductionRecord {
+  seq: number;
+  sum: number;
+  items: { hex: number; player: number; cards: Partial<Hand> }[];
+}
+
 export type CivId = 'rome' | 'egypt' | 'han' | 'maya' | 'mali' | 'norse' | 'japan' | 'persia';
 
 export type ProgressId =
@@ -152,6 +177,10 @@ export interface TurnFlags {
 
 export interface GameState {
   version: 1;
+  options: GameOptions;
+  stats: Stats;
+  raiders: RaiderTheme;
+  production: ProductionRecord | null;
   rng: number;
   board: Board;
   players: Player[];
