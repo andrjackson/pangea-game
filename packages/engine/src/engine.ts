@@ -753,7 +753,7 @@ function handle(s: GameState, p: number, a: Action): void {
 // setup
 // ---------------------------------------------------------------------------
 
-export function setupSeat(s: Pick<GameState, 'players' | 'setup'>): number {
+export function setupSeat(s: { players: unknown[]; setup: GameState['setup'] }): number {
   const n = s.players.length;
   const i = s.setup.index;
   return i < n ? i : 2 * n - 1 - i;

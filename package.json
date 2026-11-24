@@ -13,7 +13,9 @@
     "typecheck": "tsc -p packages/engine && tsc -p packages/server && tsc -p packages/client",
     "build": "npm run build -w @pangea/client",
     "start": "npm run start -w @pangea/server",
-    "dev": "npm run dev -w @pangea/server & npm run dev -w @pangea/client"
+    "host": "npm run build && npm run start",
+    "dev:server": "npm run dev -w @pangea/server",
+    "dev:client": "npm run dev -w @pangea/client"
   },
   "engines": {
     "node": ">=20"
