@@ -74,6 +74,7 @@ export const api = {
   pickCiv: (civ: CivId) => must('pickCiv', { civ }),
   start: () => must('start', {}),
   act: (action: Action) => must('action', { action }),
+  report: (note: string) => must('report', { note }),
   async leave() {
     await emit('leave', {});
     saveSession(null);

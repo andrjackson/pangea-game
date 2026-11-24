@@ -116,7 +116,7 @@ function Stepper({ types, value, onChange, max }: { types: CardType[]; value: Pa
 // top bar
 // ---------------------------------------------------------------------------
 
-export function TopBar({ view, muted, onToggleMute }: { view: PlayerView; muted: boolean; onToggleMute: () => void }) {
+export function TopBar({ view, muted, onToggleMute, onReport }: { view: PlayerView; muted: boolean; onToggleMute: () => void; onReport: () => void }) {
   const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length;
   const defense = Object.values(view.knights).reduce((n, k) => n + (k.active ? k.level : 0), 0);
   const steps = Array.from({ length: BARBARIAN_STEPS + 1 }, (_, i) => i);
@@ -143,6 +143,9 @@ export function TopBar({ view, muted, onToggleMute }: { view: PlayerView; muted:
         </div>
       </div>
       <Dice view={view} />
+      <button className="btn tiny ghost sound" onClick={onReport} title="Save this exact moment of the game with a note, so the problem can be replayed and fixed">
+        Report a problem
+      </button>
       <button className="btn tiny ghost sound" onClick={onToggleMute} title="Chime when the game is waiting on you">
         {muted ? 'Sound off' : 'Sound on'}
       </button>
@@ -788,3 +791,35 @@ export function ActionBar({ view, send, mode, setMode, armoryPicks }: { view: Pl
 }
 
 export { KNIGHT_NAMES };
+
+export function ReportDialog({ onSend, onClose }: { onSend: (note: string) => Promise<boolean>; onClose: () => void }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="panel modal" role="dialog" aria-label="Report a problem" onClick={(e) => e.stopPropagation()}>
+        <h3>Report a problem</h3>
+        <p className="small">
+          This saves the game exactly as it is right now, plus your note, on the host's computer. Say what you expected and what happened instead.
+        </p>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={5} maxLength={4000} placeholder="e.g. I had 3 ore but the City button stayed grey" autoFocus />
+        <div className="btn-row end">
+          <button className="btn ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            disabled={busy || !note.trim()}
+            onClick={async () => {
+              setBusy(true);
+              if (await onSend(note.trim())) onClose();
+              setBusy(false);
+            }}
+          >
+            Save report
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

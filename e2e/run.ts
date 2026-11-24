@@ -8,12 +8,12 @@
  * which the tests use to set up situations (hands, knights, cards) quickly.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CIVS, emptyHand, type CivId, type GameState, type Hand, type Knight, type ProgressId } from '@pangea/engine';
+import { CIVS, bankRate, emptyHand, type CivId, type GameState, type Hand, type Knight, type ProgressId } from '@pangea/engine';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +26,7 @@ const PORT = 3100;
 const URL = `http://localhost:${PORT}`;
 const NAMES = ['Ana', 'Ben', 'Cy'];
 const only = process.argv[2];
+let DATA_DIR = '';
 
 // ---------------------------------------------------------------------------
 // harness
@@ -41,7 +42,7 @@ async function startServer(): Promise<{ proc: ChildProcess; dataDir: string }> {
   if (!existsSync(join(root, 'packages/client/dist/index.html'))) throw new Error('Run "npm run build" first.');
   const dataDir = mkdtempSync(join(tmpdir(), 'pangea-e2e-'));
   const proc = spawn(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'packages/server/src/index.ts')], {
-    env: { ...process.env, PORT: String(PORT), PANGEA_DEBUG: '1', PANGEA_DATA: dataDir },
+    env: { ...process.env, PORT: String(PORT), PANGEA_DEBUG: '1', PANGEA_DATA: join(dataDir, 'games') },
     stdio: 'ignore',
   });
   for (let i = 0; i < 60; i++) {
@@ -205,6 +206,38 @@ type Scenario = { name: string; run: (t: Table) => Promise<void>; civs?: CivId[]
 
 const scenarios: Scenario[] = [
   {
+    name: 'territory: tiles take on civ art and shared tiles show both civs',
+    run: async (t) => {
+      const owned = await t.P[0].locator('[data-territory]').count();
+      assert(owned > 0, 'tiles touching starting pieces are claimed');
+      const s = await getState(t.code);
+      // a tile player 0 holds alone; give player 1 a road on one of its edges
+      const solo = s.board.hexes.find((h) => {
+        const owners = new Set<number>();
+        for (const v of s.board.vertices) if (v.hexes.includes(h.id) && s.buildings[v.id]) owners.add(s.buildings[v.id].owner);
+        for (const e of s.board.edges) if (e.hexes.includes(h.id) && s.roads[e.id] !== undefined) owners.add(s.roads[e.id]);
+        return owners.size === 1 && owners.has(0);
+      })!;
+      const edge = s.board.edges.find((e) => e.hexes.includes(solo.id) && s.roads[e.id] === undefined)!;
+      await patch(t.code, { [`roads.${edge.id}`]: 1 });
+      await t.P[2].waitForSelector('[data-territory="0,1"], [data-territory="1,0"]', { timeout: 4000 });
+    },
+  },
+  {
+    name: 'report a problem saves the game and the note on the host',
+    run: async (t) => {
+      await t.P[1].click('button:has-text("Report a problem")');
+      await t.P[1].fill('.modal textarea', 'Test report: the robber looked sleepy');
+      await t.P[1].click('.modal button:has-text("Save report")');
+      await t.P[1].waitForSelector('.toast.ok');
+      const dir = join(DATA_DIR, 'reports');
+      const files = readdirSync(dir);
+      assert(files.length === 1, 'one report file written');
+      const report = JSON.parse(readFileSync(join(dir, files[0]), 'utf8'));
+      assert(report.note.includes('sleepy') && report.reporter === t.name(1) && report.game?.board, 'report holds note, reporter and full game');
+    },
+  },
+  {
     name: 'turn alerts: tab title follows whose move it is',
     run: async (t) => {
       const title0 = await titleContains(t.P[0], 'Your turn');
@@ -226,8 +259,9 @@ const scenarios: Scenario[] = [
       await patch(t.code, { rolled: true, 'players.0.hand': hand({ grain: 4 }) });
       await t.P[0].click('.bank .card-chip[title="Grain"]');
       await t.P[0].click('.bank .btn-row:has-text("Get") .card-chip[title="Ore"]');
+      const rate = bankRate(await getState(t.code), 0, 'grain', null);
       const s = await waitFor(t.code, 'bank trade', (g) => g.players[0].hand.ore === 1);
-      assert(s.players[0].hand.grain <= 1, 'paid grain at 4:1 or a harbor rate');
+      assert(s.players[0].hand.grain === 4 - rate, `paid grain at the player's ${rate}:1 rate`);
     },
   },
   {
@@ -364,6 +398,7 @@ const scenarios: Scenario[] = [
       await t.P[0].click('text=Choose on the board');
       await clickEdge(t.P[0], myRoad);
       await waitFor(t.code, 'rebuild decision', (g) => g.queue[0]?.kind === 'envoyRebuild');
+      await t.P[0].waitForSelector('.decision:has-text("rebuild a road")');
       await clickEdge(t.P[0], myRoad);
       s = await waitFor(t.code, 'rebuilt', (g) => g.queue.length === 0);
       assert(s.roads[myRoad] === 0, 'own road rebuilt');
@@ -531,6 +566,7 @@ async function shipSeed(): Promise<number> {
 
 (async () => {
   const { proc, dataDir } = await startServer();
+  DATA_DIR = dataDir;
   const browser = await chromium.launch();
   let failed = 0;
   try {

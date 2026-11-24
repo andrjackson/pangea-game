@@ -300,3 +300,48 @@ export function bankRate(g: GameLike, player: number, give: CardType, monsoon: C
 export function metropolisCandidates(g: GameLike, player: number): number[] {
   return ownedVertices(g, player, 'city').filter((v) => !g.buildings[v].metropolis);
 }
+
+// ---------- territory (cosmetic) ----------
+
+export interface Influence {
+  player: number;
+  weight: number;
+  /** Direction (radians, screen coords) from the tile center toward this player's pieces. */
+  angle: number;
+}
+
+export const TERRITORY_WEIGHTS = { road: 1, settlement: 2, city: 3, metropolis: 4 };
+
+/**
+ * Who has spread onto a tile: every building on its corners and every road on its edges adds
+ * influence. Purely visual; it never affects the rules. Sorted by angle so sectors stay contiguous.
+ */
+export function hexInfluence(g: GameLike, hexId: number): Influence[] {
+  const hex = g.board.hexes[hexId];
+  const acc = new Map<number, { w: number; x: number; y: number }>();
+  const add = (player: number, w: number, x: number, y: number) => {
+    const a = acc.get(player) ?? { w: 0, x: 0, y: 0 };
+    a.w += w;
+    a.x += w * (x - hex.x);
+    a.y += w * (y - hex.y);
+    acc.set(player, a);
+  };
+  for (const v of g.board.vertices) {
+    if (!v.hexes.includes(hexId)) continue;
+    const b = g.buildings[v.id];
+    if (!b) continue;
+    const w = b.metropolis ? TERRITORY_WEIGHTS.metropolis : b.kind === 'city' ? TERRITORY_WEIGHTS.city : TERRITORY_WEIGHTS.settlement;
+    add(b.owner, w, v.x, v.y);
+  }
+  for (const e of g.board.edges) {
+    if (!e.hexes.includes(hexId)) continue;
+    const owner = g.roads[e.id];
+    if (owner === undefined) continue;
+    const a = g.board.vertices[e.a];
+    const b = g.board.vertices[e.b];
+    add(owner, TERRITORY_WEIGHTS.road, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  }
+  return [...acc.entries()]
+    .map(([player, a]) => ({ player, weight: a.w, angle: Math.atan2(a.y, a.x) }))
+    .sort((p, q) => p.angle - q.angle || p.player - q.player);
+}

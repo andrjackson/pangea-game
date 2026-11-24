@@ -55,6 +55,11 @@ npm install
 3. Everyone opens the link: one person creates a game and shares the 4-letter code
    (or the invite link from the lobby), everyone picks a civilization, the host starts.
 
+**Found a bug or something confusing?** Click **Report a problem** in the top bar
+during the game. It saves the exact moment of the game plus your note in
+`data/reports/` on the host PC. Open an issue on the GitHub repo and attach (or paste)
+that file; bug issues get fixed before anything else on the [backlog](BACKLOG.md).
+
 Keep the host PC awake. If it sleeps or the server stops, the game pauses; restart
 `npm run host` and everyone's browser reconnects to the same game. Games are saved
 after every move in `data/games/` (delete a file there to remove a finished game).
@@ -85,6 +90,9 @@ Then `npm run host` as usual.
 - The **robber** sleeps until the first barbarian raid.
 - **Undo** takes back your last build, knight action, improvement or bank trade. It
   can't undo dice, cards, steals or trades with players.
+- **Territory** is just for looks: tiles take on the style of whichever civs have
+  spread onto them with roads, settlements and cities, and shared tiles are split
+  between those civs.
 - The **Waiting on** panel shows exactly who the game is waiting for (discards,
   robber moves, card choices…).
 

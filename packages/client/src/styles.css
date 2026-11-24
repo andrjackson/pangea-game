@@ -930,3 +930,36 @@ input {
   color: var(--parchment);
   border-color: #3f5b70;
 }
+
+.toast.ok {
+  background: #13281a;
+  color: #cdeccf;
+  border-color: var(--good);
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 16, 22, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+}
+.modal {
+  width: min(460px, calc(100% - 32px));
+  display: grid;
+  gap: 10px;
+}
+.modal p {
+  margin: 0;
+}
+.modal textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #b9a57c;
+  background: #fffdf7;
+  resize: vertical;
+}
+.btn-row.end {
+  justify-content: flex-end;
+}

@@ -12,6 +12,7 @@ import {
   LogPanel,
   PlayerList,
   ProgressHand,
+  ReportDialog,
   TopBar,
   TradePanel,
   TurnBanner,
@@ -23,12 +24,20 @@ export function Game({ room }: { room: RoomState }) {
   const [mode, setMode] = useState<Mode | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [muted, toggleMute] = useMuted();
+  const [reporting, setReporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   useAttention(view, muted);
 
   // Drop stale modes when the turn or situation changes.
   useEffect(() => {
     if (view.current !== view.me || view.queue.length > 0) setMode(null);
   }, [view.current, view.me, view.queue.length]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     if (!toast) return;
@@ -69,7 +78,22 @@ export function Game({ room }: { room: RoomState }) {
 
   return (
     <div className="game">
-      <TopBar view={view} muted={muted} onToggleMute={toggleMute} />
+      <TopBar view={view} muted={muted} onToggleMute={toggleMute} onReport={() => setReporting(true)} />
+      {reporting && (
+        <ReportDialog
+          onClose={() => setReporting(false)}
+          onSend={async (note) => {
+            try {
+              await api.report(note);
+              setNotice('Report saved on the host computer. Thanks!');
+              return true;
+            } catch (err) {
+              setToast((err as Error).message);
+              return false;
+            }
+          }}
+        />
+      )}
       <main className="table">
         <div className="board-wrap">
           <Board
@@ -80,6 +104,7 @@ export function Game({ room }: { room: RoomState }) {
             onEdge={(id) => pick('edge', id)}
             onHex={(id) => pick('hex', id)}
           />
+          {notice && <div className="toast ok">{notice}</div>}
           {toast && (
             <div className="toast" role="alert" onClick={() => setToast(null)}>
               {toast}

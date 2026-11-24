@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
 const PORT = Number(process.env.PORT ?? 3000);
 const DATA_DIR = process.env.PANGEA_DATA ?? join(root, 'data', 'games');
+const REPORTS_DIR = process.env.PANGEA_REPORTS ?? join(DATA_DIR, '..', 'reports');
 const CLIENT_DIST = join(root, 'packages', 'client', 'dist');
 
 const store = new RoomStore(DATA_DIR);
@@ -149,6 +150,38 @@ io.on('connection', (socket) => {
   socket.on('action', (msg: { action: Action }, ack) =>
     withSession((s) => store.act(s.code, s.token, msg?.action))(msg, ack),
   );
+  // "Report a problem": saves the full game (including hidden cards) plus the player's note on the host PC.
+  socket.on('report', (msg: { note?: string }, ack) => {
+    const reply = safeAck(ack);
+    const session = sessions.get(socket.id);
+    const room = session && store.get(session.code);
+    if (!session || !room) {
+      reply({ ok: false, error: 'Join a game first.' });
+      return;
+    }
+    try {
+      const seat = room.seats.find((s) => s.token === session.token);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const reporter = (seat?.name ?? 'unknown').replace(/[^A-Za-z0-9_-]/g, '_');
+      mkdirSync(REPORTS_DIR, { recursive: true });
+      const file = join(REPORTS_DIR, `${room.code}-${stamp}-${reporter}.json`);
+      const report = {
+        note: String(msg?.note ?? '').slice(0, 4000),
+        reporter: seat?.name ?? null,
+        reporterPlayer: room.game ? room.order.indexOf(session.token) : null,
+        code: room.code,
+        savedAt: new Date().toISOString(),
+        seats: room.seats.map((s) => ({ name: s.name, civ: s.civ })),
+        game: room.game,
+      };
+      writeFileSync(file, JSON.stringify(report, null, 2));
+      console.log(`Problem report saved: ${file}`);
+      reply({ ok: true });
+    } catch (err) {
+      reply({ ok: false, error: errorMessage(err) });
+    }
+  });
+
   socket.on('leave', (msg: unknown, ack) => {
     withSession((s) => {
       const room = store.leave(s.code, s.token);

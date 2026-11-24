@@ -18,7 +18,7 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
   desert: 'Desert',
 };
 
-const SPOTS: [number, number][] = [
+export const SPOTS: [number, number][] = [
   [-0.44, -0.4],
   [0.44, -0.4],
   [-0.58, 0.18],
@@ -92,7 +92,7 @@ function Dune({ x, y }: { x: number; y: number }) {
   );
 }
 
-const GLYPH: Record<Terrain, (p: { x: number; y: number }) => JSX.Element> = {
+export const GLYPH: Record<Terrain, (p: { x: number; y: number }) => JSX.Element> = {
   forest: Tree,
   pasture: Sheep,
   fields: Wheat,

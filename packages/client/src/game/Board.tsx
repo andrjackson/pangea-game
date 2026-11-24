@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { CIVS, hexCorners, type PlayerView } from '@pangea/engine';
+import { CIVS, hexCorners, hexInfluence, type PlayerView } from '@pangea/engine';
 import { CityPiece, KnightPiece, RoadPiece, SettlementPiece } from '../art/civ';
+import { TerritoryPatterns, TerritoryTile } from '../art/territory';
 import { HarborMarker, NumberToken, TERRAIN_FILL, TileArt } from '../art/tiles';
 
 export interface Targets {
@@ -31,12 +32,19 @@ export function Board({ view, targets, selected, onVertex, onEdge, onHex }: Prop
     return { minX, minY, w: Math.max(...xs) + m - minX, h: Math.max(...ys) + m - minY };
   }, [board]);
 
+  const influence = useMemo(
+    () => board.hexes.map((h) => hexInfluence(view, h.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, view.buildings, view.roads],
+  );
+
   const lastSum = view.dice && view.rolled ? view.dice.red + view.dice.yellow : null;
   const civOf = (p: number) => view.players[p].civ;
 
   return (
     <svg className="board" viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`} role="img" aria-label="Game board">
       <defs>
+        <TerritoryPatterns />
         <pattern id="waves" width="0.8" height="0.5" patternUnits="userSpaceOnUse">
           <path d="M0 0.25 Q0.2 0.12 0.4 0.25 T0.8 0.25" fill="none" stroke="#5f8fae" strokeWidth="0.025" opacity="0.6" />
         </pattern>
@@ -54,8 +62,14 @@ export function Board({ view, targets, selected, onVertex, onEdge, onHex }: Prop
 
       {board.hexes.map((h) => (
         <g key={h.id}>
-          <polygon points={poly(hexCorners(h.x, h.y, 0.985))} fill={TERRAIN_FILL[h.terrain]} stroke="#5b4a2e" strokeWidth={0.025} />
-          <TileArt terrain={h.terrain} x={h.x} y={h.y} />
+          {influence[h.id].length ? (
+            <TerritoryTile hex={h} influence={influence[h.id]} civOf={civOf} />
+          ) : (
+            <>
+              <polygon points={poly(hexCorners(h.x, h.y, 0.985))} fill={TERRAIN_FILL[h.terrain]} stroke="#5b4a2e" strokeWidth={0.025} />
+              <TileArt terrain={h.terrain} x={h.x} y={h.y} />
+            </>
+          )}
           {h.token !== null && <NumberToken n={h.token} x={h.x} y={h.y} highlight={lastSum === h.token} />}
         </g>
       ))}
